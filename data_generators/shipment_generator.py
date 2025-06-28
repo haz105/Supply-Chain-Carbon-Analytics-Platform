@@ -79,34 +79,31 @@ class ShipmentGenerator:
     ) -> Dict:
         """Generate a single shipment with realistic parameters."""
         
-        # Select origin and destination cities
-        origin_city = random.choice(self.major_cities)
-        destination_city = random.choice(self.major_cities)
+        # First, determine the desired distance range for this shipment
+        distance_category = self._select_distance_category()
         
-        # Ensure origin and destination are different
-        while destination_city['name'] == origin_city['name']:
-            destination_city = random.choice(self.major_cities)
-        
+        # Select origin and destination cities based on distance category
+        origin_city, destination_city = self._select_cities_by_distance(distance_category)
+
         # Calculate distance
         distance_km = self._calculate_distance(
             origin_city['lat'], origin_city['lng'],
             destination_city['lat'], destination_city['lng']
         )
-        
+
         # Determine transport mode based on distance and seasonal factors
         transport_mode = self._select_transport_mode(distance_km, include_seasonal_patterns)
-        
-        # Generate weight based on transport mode and package type
-        weight_kg = self._generate_weight(transport_mode)
-        
+
+        # Select package type first using probabilities
+        package_type = self._select_package_type()
+        # Generate weight within the selected package type's range
+        weight_kg = self._generate_weight(package_type)
+
         # Generate timing with seasonal patterns
         departure_time, arrival_time = self._generate_timing(
             start_date, end_date, distance_km, transport_mode, include_seasonal_patterns
         )
-        
-        # Select package type
-        package_type = self._select_package_type(weight_kg, transport_mode)
-        
+
         # Generate shipment
         shipment = {
             'shipment_id': str(uuid.uuid4()),
@@ -119,82 +116,195 @@ class ShipmentGenerator:
             'transport_mode': transport_mode,
             'weight_kg': round(weight_kg, 2),
             'distance_km': round(distance_km, 2),
-            'package_type': package_type,
+            'package_type': package_type['name'],
             'departure_time': departure_time,
             'arrival_time': arrival_time,
             'carrier_id': str(uuid.uuid4()),
             'created_at': datetime.now()
         }
-        
         return shipment
     
+    def _select_distance_category(self) -> str:
+        """Select a distance category to create balanced transport mode distribution."""
+        # Define distance categories with probabilities to achieve realistic transport mode distribution
+        categories = [
+            ('local', 0.25),      # 0-100 km: mostly ground
+            ('regional', 0.35),   # 100-500 km: ground and air
+            ('national', 0.25),   # 500-2000 km: air and ground
+            ('international', 0.15)  # 2000+ km: air and sea
+        ]
+        
+        category_names = [cat[0] for cat in categories]
+        probabilities = [cat[1] for cat in categories]
+        
+        return random.choices(category_names, weights=probabilities)[0]
+    
+    def _select_cities_by_distance(self, distance_category: str) -> Tuple[Dict, Dict]:
+        """Select origin and destination cities based on distance category."""
+        
+        if distance_category == 'local':
+            # Local: Same region, nearby cities
+            region = random.choice(['north_america', 'europe', 'asia'])
+            region_cities = [city for city in self.major_cities if city['region'] == region]
+            
+            if len(region_cities) >= 2:
+                origin_city = random.choice(region_cities)
+                destination_city = random.choice(region_cities)
+                while destination_city['name'] == origin_city['name']:
+                    destination_city = random.choice(region_cities)
+            else:
+                # Fallback to any cities if region doesn't have enough
+                origin_city = random.choice(self.major_cities)
+                destination_city = random.choice(self.major_cities)
+                while destination_city['name'] == origin_city['name']:
+                    destination_city = random.choice(self.major_cities)
+        
+        elif distance_category == 'regional':
+            # Regional: Same continent, different regions
+            continent = random.choice(['north_america', 'europe', 'asia'])
+            continent_cities = [city for city in self.major_cities if city['region'] == continent]
+            
+            if len(continent_cities) >= 2:
+                origin_city = random.choice(continent_cities)
+                destination_city = random.choice(continent_cities)
+                while destination_city['name'] == origin_city['name']:
+                    destination_city = random.choice(continent_cities)
+            else:
+                # Fallback
+                origin_city = random.choice(self.major_cities)
+                destination_city = random.choice(self.major_cities)
+                while destination_city['name'] == origin_city['name']:
+                    destination_city = random.choice(self.major_cities)
+        
+        elif distance_category == 'national':
+            # National: Same continent, could be same or different regions
+            continent = random.choice(['north_america', 'europe', 'asia'])
+            continent_cities = [city for city in self.major_cities if city['region'] == continent]
+            
+            if len(continent_cities) >= 2:
+                origin_city = random.choice(continent_cities)
+                destination_city = random.choice(continent_cities)
+                while destination_city['name'] == origin_city['name']:
+                    destination_city = random.choice(continent_cities)
+            else:
+                # Fallback
+                origin_city = random.choice(self.major_cities)
+                destination_city = random.choice(self.major_cities)
+                while destination_city['name'] == origin_city['name']:
+                    destination_city = random.choice(self.major_cities)
+        
+        else:  # international
+            # International: Different continents
+            origin_city = random.choice(self.major_cities)
+            destination_city = random.choice(self.major_cities)
+            while (destination_city['name'] == origin_city['name'] or 
+                   destination_city['region'] == origin_city['region']):
+                destination_city = random.choice(self.major_cities)
+        
+        return origin_city, destination_city
+    
     def _load_major_cities(self) -> List[Dict]:
-        """Load major US cities with coordinates."""
+        """Load major world cities/ports with coordinates (global realism)."""
         return [
-            {'name': 'New York', 'lat': 40.7128, 'lng': -74.0060},
-            {'name': 'Los Angeles', 'lat': 34.0522, 'lng': -118.2437},
-            {'name': 'Chicago', 'lat': 41.8781, 'lng': -87.6298},
-            {'name': 'Houston', 'lat': 29.7604, 'lng': -95.3698},
-            {'name': 'Phoenix', 'lat': 33.4484, 'lng': -112.0740},
-            {'name': 'Philadelphia', 'lat': 39.9526, 'lng': -75.1652},
-            {'name': 'San Antonio', 'lat': 29.4241, 'lng': -98.4936},
-            {'name': 'San Diego', 'lat': 32.7157, 'lng': -117.1611},
-            {'name': 'Dallas', 'lat': 32.7767, 'lng': -96.7970},
-            {'name': 'San Jose', 'lat': 37.3382, 'lng': -121.8863},
-            {'name': 'Austin', 'lat': 30.2672, 'lng': -97.7431},
-            {'name': 'Jacksonville', 'lat': 30.3322, 'lng': -81.6557},
-            {'name': 'Fort Worth', 'lat': 32.7555, 'lng': -97.3308},
-            {'name': 'Columbus', 'lat': 39.9612, 'lng': -82.9988},
-            {'name': 'Charlotte', 'lat': 35.2271, 'lng': -80.8431},
-            {'name': 'San Francisco', 'lat': 37.7749, 'lng': -122.4194},
-            {'name': 'Indianapolis', 'lat': 39.7684, 'lng': -86.1581},
-            {'name': 'Seattle', 'lat': 47.6062, 'lng': -122.3321},
-            {'name': 'Denver', 'lat': 39.7392, 'lng': -104.9903},
-            {'name': 'Washington', 'lat': 38.9072, 'lng': -77.0369},
-            {'name': 'Boston', 'lat': 42.3601, 'lng': -71.0589},
-            {'name': 'El Paso', 'lat': 31.7619, 'lng': -106.4850},
-            {'name': 'Nashville', 'lat': 36.1627, 'lng': -86.7816},
-            {'name': 'Detroit', 'lat': 42.3314, 'lng': -83.0458},
-            {'name': 'Oklahoma City', 'lat': 35.4676, 'lng': -97.5164},
-            {'name': 'Portland', 'lat': 45.5152, 'lng': -122.6784},
-            {'name': 'Las Vegas', 'lat': 36.1699, 'lng': -115.1398},
-            {'name': 'Memphis', 'lat': 35.1495, 'lng': -90.0490},
-            {'name': 'Louisville', 'lat': 38.2527, 'lng': -85.7585},
-            {'name': 'Baltimore', 'lat': 39.2904, 'lng': -76.6122},
-            {'name': 'Milwaukee', 'lat': 43.0389, 'lng': -87.9065},
-            {'name': 'Albuquerque', 'lat': 35.0844, 'lng': -106.6504},
-            {'name': 'Tucson', 'lat': 32.2226, 'lng': -110.9747},
-            {'name': 'Fresno', 'lat': 36.7378, 'lng': -119.7871},
-            {'name': 'Sacramento', 'lat': 38.5816, 'lng': -121.4944},
-            {'name': 'Mesa', 'lat': 33.4152, 'lng': -111.8315},
-            {'name': 'Kansas City', 'lat': 39.0997, 'lng': -94.5786},
-            {'name': 'Atlanta', 'lat': 33.7490, 'lng': -84.3880},
-            {'name': 'Miami', 'lat': 25.7617, 'lng': -80.1918},
-            {'name': 'New Orleans', 'lat': 29.9511, 'lng': -90.0715},
-            {'name': 'Minneapolis', 'lat': 44.9778, 'lng': -93.2650},
-            {'name': 'Cleveland', 'lat': 41.4993, 'lng': -81.6944},
-            {'name': 'Tampa', 'lat': 27.9506, 'lng': -82.4572},
-            {'name': 'Pittsburgh', 'lat': 40.4406, 'lng': -79.9959},
-            {'name': 'Cincinnati', 'lat': 39.1031, 'lng': -84.5120},
-            {'name': 'Orlando', 'lat': 28.5383, 'lng': -81.3792},
-            {'name': 'St. Louis', 'lat': 38.6270, 'lng': -90.1994},
-            {'name': 'Buffalo', 'lat': 42.8864, 'lng': -78.8784},
-            {'name': 'Raleigh', 'lat': 35.7796, 'lng': -78.6382},
-            {'name': 'Richmond', 'lat': 37.5407, 'lng': -77.4360},
-            {'name': 'Birmingham', 'lat': 33.5207, 'lng': -86.8025},
-            {'name': 'Salt Lake City', 'lat': 40.7608, 'lng': -111.8910},
-            {'name': 'Rochester', 'lat': 43.1566, 'lng': -77.6088},
-            {'name': 'Grand Rapids', 'lat': 42.9634, 'lng': -85.6681},
-            {'name': 'Tulsa', 'lat': 36.1540, 'lng': -95.9928},
-            {'name': 'Honolulu', 'lat': 21.3099, 'lng': -157.8581},
+            # North America - Major Cities
+            {'name': 'New York', 'lat': 40.7128, 'lng': -74.0060, 'region': 'north_america'},
+            {'name': 'Los Angeles', 'lat': 34.0522, 'lng': -118.2437, 'region': 'north_america'},
+            {'name': 'Chicago', 'lat': 41.8781, 'lng': -87.6298, 'region': 'north_america'},
+            {'name': 'Houston', 'lat': 29.7604, 'lng': -95.3698, 'region': 'north_america'},
+            {'name': 'Toronto', 'lat': 43.651070, 'lng': -79.347015, 'region': 'north_america'},
+            {'name': 'Mexico City', 'lat': 19.4326, 'lng': -99.1332, 'region': 'north_america'},
+            {'name': 'Vancouver', 'lat': 49.2827, 'lng': -123.1207, 'region': 'north_america'},
+            {'name': 'Panama City', 'lat': 8.9824, 'lng': -79.5199, 'region': 'north_america'},
+            
+            # North America - Regional Cities (for shorter distances)
+            {'name': 'Boston', 'lat': 42.3601, 'lng': -71.0589, 'region': 'north_america'},
+            {'name': 'Philadelphia', 'lat': 39.9526, 'lng': -75.1652, 'region': 'north_america'},
+            {'name': 'Miami', 'lat': 25.7617, 'lng': -80.1918, 'region': 'north_america'},
+            {'name': 'Atlanta', 'lat': 33.7490, 'lng': -84.3880, 'region': 'north_america'},
+            {'name': 'Dallas', 'lat': 32.7767, 'lng': -96.7970, 'region': 'north_america'},
+            {'name': 'Phoenix', 'lat': 33.4484, 'lng': -112.0740, 'region': 'north_america'},
+            {'name': 'Seattle', 'lat': 47.6062, 'lng': -122.3321, 'region': 'north_america'},
+            {'name': 'Denver', 'lat': 39.7392, 'lng': -104.9903, 'region': 'north_america'},
+            {'name': 'Montreal', 'lat': 45.5017, 'lng': -73.5673, 'region': 'north_america'},
+            {'name': 'Calgary', 'lat': 51.0447, 'lng': -114.0719, 'region': 'north_america'},
+            
+            # South America
+            {'name': 'São Paulo', 'lat': -23.5505, 'lng': -46.6333, 'region': 'south_america'},
+            {'name': 'Buenos Aires', 'lat': -34.6037, 'lng': -58.3816, 'region': 'south_america'},
+            {'name': 'Lima', 'lat': -12.0464, 'lng': -77.0428, 'region': 'south_america'},
+            {'name': 'Santiago', 'lat': -33.4489, 'lng': -70.6693, 'region': 'south_america'},
+            {'name': 'Bogotá', 'lat': 4.7110, 'lng': -74.0721, 'region': 'south_america'},
+            {'name': 'Rio de Janeiro', 'lat': -22.9068, 'lng': -43.1729, 'region': 'south_america'},
+            {'name': 'Caracas', 'lat': 10.4806, 'lng': -66.9036, 'region': 'south_america'},
+            
+            # Europe - Major Cities
+            {'name': 'London', 'lat': 51.5074, 'lng': -0.1278, 'region': 'europe'},
+            {'name': 'Rotterdam', 'lat': 51.9225, 'lng': 4.47917, 'region': 'europe'},
+            {'name': 'Hamburg', 'lat': 53.5511, 'lng': 9.9937, 'region': 'europe'},
+            {'name': 'Antwerp', 'lat': 51.2194, 'lng': 4.4025, 'region': 'europe'},
+            {'name': 'Paris', 'lat': 48.8566, 'lng': 2.3522, 'region': 'europe'},
+            {'name': 'Madrid', 'lat': 40.4168, 'lng': -3.7038, 'region': 'europe'},
+            {'name': 'Moscow', 'lat': 55.7558, 'lng': 37.6173, 'region': 'europe'},
+            
+            # Europe - Regional Cities
+            {'name': 'Berlin', 'lat': 52.5200, 'lng': 13.4050, 'region': 'europe'},
+            {'name': 'Rome', 'lat': 41.9028, 'lng': 12.4964, 'region': 'europe'},
+            {'name': 'Amsterdam', 'lat': 52.3676, 'lng': 4.9041, 'region': 'europe'},
+            {'name': 'Barcelona', 'lat': 41.3851, 'lng': 2.1734, 'region': 'europe'},
+            {'name': 'Milan', 'lat': 45.4642, 'lng': 9.1900, 'region': 'europe'},
+            {'name': 'Frankfurt', 'lat': 50.1109, 'lng': 8.6821, 'region': 'europe'},
+            {'name': 'Brussels', 'lat': 50.8503, 'lng': 4.3517, 'region': 'europe'},
+            {'name': 'Vienna', 'lat': 48.2082, 'lng': 16.3738, 'region': 'europe'},
+            
+            # Africa
+            {'name': 'Lagos', 'lat': 6.5244, 'lng': 3.3792, 'region': 'africa'},
+            {'name': 'Cape Town', 'lat': -33.9249, 'lng': 18.4241, 'region': 'africa'},
+            {'name': 'Durban', 'lat': -29.8587, 'lng': 31.0218, 'region': 'africa'},
+            {'name': 'Cairo', 'lat': 30.0444, 'lng': 31.2357, 'region': 'africa'},
+            {'name': 'Nairobi', 'lat': -1.2921, 'lng': 36.8219, 'region': 'africa'},
+            {'name': 'Johannesburg', 'lat': -26.2041, 'lng': 28.0473, 'region': 'africa'},
+            {'name': 'Casablanca', 'lat': 33.5731, 'lng': -7.5898, 'region': 'africa'},
+            
+            # Asia - Major Cities
+            {'name': 'Shanghai', 'lat': 31.2304, 'lng': 121.4737, 'region': 'asia'},
+            {'name': 'Singapore', 'lat': 1.3521, 'lng': 103.8198, 'region': 'asia'},
+            {'name': 'Hong Kong', 'lat': 22.3193, 'lng': 114.1694, 'region': 'asia'},
+            {'name': 'Tokyo', 'lat': 35.6895, 'lng': 139.6917, 'region': 'asia'},
+            {'name': 'Mumbai', 'lat': 19.0760, 'lng': 72.8777, 'region': 'asia'},
+            {'name': 'Dubai', 'lat': 25.2048, 'lng': 55.2708, 'region': 'asia'},
+            {'name': 'Busan', 'lat': 35.1796, 'lng': 129.0756, 'region': 'asia'},
+            
+            # Asia - Regional Cities
+            {'name': 'Beijing', 'lat': 39.9042, 'lng': 116.4074, 'region': 'asia'},
+            {'name': 'Seoul', 'lat': 37.5665, 'lng': 126.9780, 'region': 'asia'},
+            {'name': 'Bangkok', 'lat': 13.7563, 'lng': 100.5018, 'region': 'asia'},
+            {'name': 'Manila', 'lat': 14.5995, 'lng': 120.9842, 'region': 'asia'},
+            {'name': 'Jakarta', 'lat': -6.2088, 'lng': 106.8456, 'region': 'asia'},
+            {'name': 'Kuala Lumpur', 'lat': 3.1390, 'lng': 101.6869, 'region': 'asia'},
+            {'name': 'Ho Chi Minh City', 'lat': 10.8231, 'lng': 106.6297, 'region': 'asia'},
+            {'name': 'Chennai', 'lat': 13.0827, 'lng': 80.2707, 'region': 'asia'},
+            {'name': 'Kolkata', 'lat': 22.5726, 'lng': 88.3639, 'region': 'asia'},
+            
+            # Oceania
+            {'name': 'Sydney', 'lat': -33.8688, 'lng': 151.2093, 'region': 'oceania'},
+            {'name': 'Melbourne', 'lat': -37.8136, 'lng': 144.9631, 'region': 'oceania'},
+            {'name': 'Auckland', 'lat': -36.8485, 'lng': 174.7633, 'region': 'oceania'},
+            {'name': 'Brisbane', 'lat': -27.4698, 'lng': 153.0251, 'region': 'oceania'},
+            {'name': 'Perth', 'lat': -31.9505, 'lng': 115.8605, 'region': 'oceania'},
+            
+            # Middle East
+            {'name': 'Jeddah', 'lat': 21.4858, 'lng': 39.1925, 'region': 'middle_east'},
+            {'name': 'Istanbul', 'lat': 41.0082, 'lng': 28.9784, 'region': 'middle_east'},
+            {'name': 'Tehran', 'lat': 35.6892, 'lng': 51.3890, 'region': 'middle_east'},
+            {'name': 'Riyadh', 'lat': 24.7136, 'lng': 46.6753, 'region': 'middle_east'},
         ]
     
     def _load_package_types(self) -> List[Dict]:
         """Load package types with weight distributions."""
         return [
-            {'name': 'Small Package', 'min_weight': 0.1, 'max_weight': 5.0, 'probability': 0.4},
-            {'name': 'Medium Package', 'min_weight': 5.0, 'max_weight': 25.0, 'probability': 0.3},
-            {'name': 'Large Package', 'min_weight': 25.0, 'max_weight': 100.0, 'probability': 0.2},
+            {'name': 'Small Package', 'min_weight': 0.1, 'max_weight': 5.0, 'probability': 0.5},
+            {'name': 'Medium Package', 'min_weight': 5.0, 'max_weight': 25.0, 'probability': 0.25},
+            {'name': 'Large Package', 'min_weight': 25.0, 'max_weight': 100.0, 'probability': 0.15},
             {'name': 'Pallet', 'min_weight': 100.0, 'max_weight': 500.0, 'probability': 0.08},
             {'name': 'Container', 'min_weight': 500.0, 'max_weight': 2000.0, 'probability': 0.02},
         ]
@@ -251,30 +361,17 @@ class ShipmentGenerator:
         
         return random.choices(modes, weights=probs)[0]
     
-    def _generate_weight(self, transport_mode: str) -> float:
-        """Generate realistic weight based on transport mode."""
-        
-        # Weight distributions by transport mode
-        if transport_mode == 'air':
-            # Air freight: lighter packages, faster delivery
-            mean_weight = 50.0
-            std_weight = 30.0
-        elif transport_mode == 'ground':
-            # Ground freight: medium packages
-            mean_weight = 100.0
-            std_weight = 60.0
-        else:  # sea
-            # Sea freight: heavier packages, slower delivery
-            mean_weight = 500.0
-            std_weight = 300.0
-        
-        # Generate weight using log-normal distribution
-        weight = np.random.lognormal(mean=np.log(mean_weight), sigma=0.5)
-        
-        # Apply reasonable bounds
-        weight = max(0.1, min(2000.0, weight))
-        
-        return weight
+    def _select_package_type(self) -> Dict:
+        """Randomly select a package type based on defined probabilities."""
+        types = self.package_types
+        names = [t['name'] for t in types]
+        probs = [t['probability'] for t in types]
+        selected_name = random.choices(names, weights=probs, k=1)[0]
+        return next(t for t in types if t['name'] == selected_name)
+    
+    def _generate_weight(self, package_type: Dict) -> float:
+        """Generate a weight within the selected package type's range."""
+        return random.uniform(package_type['min_weight'], package_type['max_weight'])
     
     def _generate_timing(
         self,
@@ -333,25 +430,6 @@ class ShipmentGenerator:
         travel_hours = max(travel_hours, min_hours[transport_mode])
         
         return travel_hours
-    
-    def _select_package_type(self, weight_kg: float, transport_mode: str) -> str:
-        """Select package type based on weight and transport mode."""
-        
-        # Filter package types based on weight
-        suitable_types = [
-            pkg for pkg in self.package_types
-            if pkg['min_weight'] <= weight_kg <= pkg['max_weight']
-        ]
-        
-        if not suitable_types:
-            # If no exact match, find the closest
-            suitable_types = self.package_types
-        
-        # Select based on probability
-        types = [pkg['name'] for pkg in suitable_types]
-        probs = [pkg['probability'] for pkg in suitable_types]
-        
-        return random.choices(types, weights=probs)[0]
     
     def generate_seasonal_dataset(
         self,

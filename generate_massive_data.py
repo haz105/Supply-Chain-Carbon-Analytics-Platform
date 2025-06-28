@@ -22,13 +22,15 @@ def generate_massive_data():
     start_time = time.time()
     
     # Generate data in batches to avoid memory issues
-    batch_size = 1000
-    total_shipments = 25000
+    batch_size = 2000
+    total_shipments = 100000
     num_batches = total_shipments // batch_size
     
     print(f"📊 Generating {total_shipments:,} shipments in {num_batches} batches of {batch_size:,}")
     print()
     
+    total_shipments_ingested = 0
+    total_emissions_ingested = 0
     for batch in range(num_batches):
         batch_start = time.time()
         print(f"🔄 Batch {batch + 1}/{num_batches} - Generating {batch_size:,} shipments...")
@@ -36,21 +38,26 @@ def generate_massive_data():
         try:
             # Generate batch
             run_etl_pipeline(num_shipments=batch_size)
-            
+            # After each batch, count current totals
+            session = get_db_session()
+            shipment_count = session.query(func.count(Shipment.shipment_id)).scalar()
+            emission_count = session.query(func.count(CarbonEmission.emission_id)).scalar()
+            session.close()
+            total_shipments_ingested = shipment_count
+            total_emissions_ingested = emission_count
             batch_time = time.time() - batch_start
             print(f"✅ Batch {batch + 1} completed in {batch_time:.2f} seconds")
-            
             # Show progress
             completed = (batch + 1) * batch_size
             progress = (completed / total_shipments) * 100
             print(f"📈 Progress: {completed:,}/{total_shipments:,} ({progress:.1f}%)")
             print()
-            
         except Exception as e:
             print(f"❌ Error in batch {batch + 1}: {e}")
             continue
-    
     total_time = time.time() - start_time
+    # Print summary at the very end
+    print(f"[SUMMARY] Total ingested: {total_shipments_ingested} shipments, {total_emissions_ingested} with emissions.")
     
     # Verify the data
     print("🔍 Verifying generated data...")
@@ -110,13 +117,17 @@ def check_data_distribution():
             func.min(CarbonEmission.co2_kg),
             func.max(CarbonEmission.co2_kg),
             func.sum(CarbonEmission.co2_kg)
-        ).scalar()
+        ).first()
         
-        print(f"\n🌱 Emissions Statistics:")
-        print(f"   Average CO₂ per shipment: {emissions_query[0]:.2f} kg")
-        print(f"   Min CO₂ per shipment: {emissions_query[1]:.2f} kg")
-        print(f"   Max CO₂ per shipment: {emissions_query[2]:.2f} kg")
-        print(f"   Total CO₂ emissions: {emissions_query[3]:,.0f} kg")
+        if emissions_query:
+            avg_co2, min_co2, max_co2, sum_co2 = emissions_query
+            print(f"\n🌱 Emissions Statistics:")
+            print(f"   Average CO₂ per shipment: {float(avg_co2):.2f} kg")
+            print(f"   Min CO₂ per shipment: {float(min_co2):.2f} kg")
+            print(f"   Max CO₂ per shipment: {float(max_co2):.2f} kg")
+            print(f"   Total CO₂ emissions: {float(sum_co2):,.0f} kg")
+        else:
+            print("\n🌱 Emissions Statistics: No data available.")
         
         session.close()
         

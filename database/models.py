@@ -84,11 +84,11 @@ class CarbonEmission(Base):
         nullable=False
     )
     
-    # Emission values (kg)
-    co2_kg: Mapped[float] = mapped_column(DECIMAL(10, 6), nullable=False)
-    ch4_kg: Mapped[float] = mapped_column(DECIMAL(10, 6), nullable=False, default=0)
-    n2o_kg: Mapped[float] = mapped_column(DECIMAL(10, 6), nullable=False, default=0)
-    co2_equivalent_kg: Mapped[float] = mapped_column(DECIMAL(10, 6), nullable=False)
+    # Emission values (kg) - Increased precision to handle larger values
+    co2_kg: Mapped[float] = mapped_column(DECIMAL(18, 6), nullable=False)
+    ch4_kg: Mapped[float] = mapped_column(DECIMAL(18, 6), nullable=False, default=0)
+    n2o_kg: Mapped[float] = mapped_column(DECIMAL(18, 6), nullable=False, default=0)
+    co2_equivalent_kg: Mapped[float] = mapped_column(DECIMAL(18, 6), nullable=False)
     
     # Calculation metadata
     emission_factor_source: Mapped[str] = mapped_column(String(100), nullable=False)

@@ -295,19 +295,31 @@ def main():
         
         with col2:
             st.subheader("📦 Emissions by Package Type")
-            package_emissions = df.groupby('package_type')['co2_kg'].sum().reset_index()
-            
-            fig_bar = px.bar(
-                package_emissions,
+            # Aggregate emissions by package type
+            agg = df.groupby('package_type', as_index=False)['co2_kg'].sum()
+
+            # Define your preferred order (only for present types)
+            preferred_order = [t for t in ['Small Package', 'Large Package', 'Pallet'] if t in agg['package_type'].tolist()]
+            agg = agg.set_index('package_type').reindex(preferred_order).reset_index()
+
+            color_map = {
+                'Small Package': '#FFA15A',
+                'Large Package': '#EF553B',
+                'Pallet': '#AB63FA'
+            }
+
+            fig = px.bar(
+                agg,
                 x='package_type',
                 y='co2_kg',
-                title="Emissions by Package Type",
+                color='package_type',
+                color_discrete_map=color_map,
                 labels={'co2_kg': 'CO₂ Emissions (kg)', 'package_type': 'Package Type'},
-                color='co2_kg',
-                color_continuous_scale='Viridis'
+                title='Emissions by Package Type'
             )
-            fig_bar.update_layout(height=400)
-            st.plotly_chart(fig_bar, use_container_width=True)
+            fig.update_layout(showlegend=False)
+
+            st.plotly_chart(fig, use_container_width=True)
         
         # Row 3: Map and Statistics
         st.subheader("🗺️ Carbon Intensity Map")
