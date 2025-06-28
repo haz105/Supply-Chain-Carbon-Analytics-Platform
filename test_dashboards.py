@@ -20,13 +20,17 @@ def test_dashboards():
     
     required_packages = [
         'dash', 'dash-bootstrap-components', 'plotly', 
-        'streamlit', 'scikit-learn', 'pandas', 'numpy'
+        'streamlit', 'sklearn', 'pandas', 'numpy'
     ]
     
     missing_packages = []
     for package in required_packages:
         try:
-            __import__(package.replace('-', '_'))
+            if package == 'sklearn':
+                # scikit-learn is imported as sklearn
+                __import__('sklearn')
+            else:
+                __import__(package.replace('-', '_'))
             print(f"  ✅ {package}")
         except ImportError:
             print(f"  ❌ {package} - MISSING")
@@ -42,6 +46,10 @@ def test_dashboards():
     print("-" * 40)
     
     try:
+        # Test sklearn import first
+        import sklearn
+        print(f"  ✅ scikit-learn imported successfully (version: {sklearn.__version__})")
+        
         from analytics.ml_models import train_all_models, get_training_data
         
         # Check if we have training data

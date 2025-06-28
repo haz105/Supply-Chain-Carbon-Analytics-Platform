@@ -67,4 +67,11 @@ arch==6.2.0
 
 # Optimization
 pulp==2.7.0
-ortools==9.8.3296 
+ortools==9.8.3296
+
+# AWS Cloud Services
+mangum==0.17.0
+
+# Real-time and streaming
+asyncio-mqtt==0.13.0
+websockets==12.0 

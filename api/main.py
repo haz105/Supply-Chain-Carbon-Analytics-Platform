@@ -4,7 +4,7 @@ Provides REST API endpoints for emissions analytics, route optimization, and sup
 """
 
 from datetime import datetime, date
-from typing import List, Optional
+from typing import List, Optional, Dict, Any
 from fastapi import FastAPI, Depends, HTTPException, status, Request
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session
@@ -117,7 +117,8 @@ async def get_emissions_summary(
             AND s.departure_time <= :end_date
         """
         
-        params = {
+        # Type annotation to clarify params dictionary
+        params: Dict[str, Any] = {
             "start_date": request.start_date,
             "end_date": request.end_date
         }

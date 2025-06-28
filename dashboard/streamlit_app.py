@@ -263,23 +263,35 @@ def main():
         
         with col1:
             st.subheader("📊 Distance vs Emissions")
-            fig_scatter = px.scatter(
-                df,
-                x='distance_km',
-                y='co2_kg',
-                color='transport_mode',
-                size='weight_kg',
-                hover_data=['package_type', 'weight_kg'],
-                title="Distance vs Emissions Relationship",
-                labels={
-                    'distance_km': 'Distance (km)',
-                    'co2_kg': 'CO₂ Emissions (kg)',
-                    'transport_mode': 'Transport Mode',
-                    'weight_kg': 'Weight (kg)'
-                }
-            )
-            fig_scatter.update_layout(height=400)
-            st.plotly_chart(fig_scatter, use_container_width=True)
+            
+            # Clean the data for the scatter plot
+            df_clean = df.copy()
+            df_clean['weight_kg'] = pd.to_numeric(df_clean['weight_kg'], errors='coerce')
+            df_clean = df_clean.dropna(subset=['weight_kg', 'distance_km', 'co2_kg'])
+            
+            # Convert to float to ensure numeric type
+            df_clean['weight_kg'] = df_clean['weight_kg'].astype(float)
+            
+            if not df_clean.empty:
+                fig_scatter = px.scatter(
+                    df_clean,
+                    x='distance_km',
+                    y='co2_kg',
+                    color='transport_mode',
+                    size='weight_kg',
+                    hover_data=['package_type', 'weight_kg'],
+                    title="Distance vs Emissions Relationship",
+                    labels={
+                        'distance_km': 'Distance (km)',
+                        'co2_kg': 'CO₂ Emissions (kg)',
+                        'transport_mode': 'Transport Mode',
+                        'weight_kg': 'Weight (kg)'
+                    }
+                )
+                fig_scatter.update_layout(height=400)
+                st.plotly_chart(fig_scatter, use_container_width=True)
+            else:
+                st.warning("No valid data available for scatter plot after cleaning.")
         
         with col2:
             st.subheader("📦 Emissions by Package Type")
@@ -300,49 +312,87 @@ def main():
         # Row 3: Map and Statistics
         st.subheader("🗺️ Carbon Intensity Map")
         
-        # Calculate carbon intensity
-        df['carbon_intensity'] = df['co2_kg'] / df['distance_km']
+        # Calculate carbon intensity and clean data for map
+        df_map = df.copy()
         
-        # Create map
-        fig_map = px.scatter_mapbox(
-            df,
-            lat='origin_lat',
-            lon='origin_lng',
-            size='carbon_intensity',
-            color='transport_mode',
-            hover_data=['distance_km', 'co2_kg', 'package_type'],
-            title="Carbon Intensity by Origin Location",
-            mapbox_style="carto-positron",
-            zoom=3
-        )
+        # Ensure numeric conversion for calculations
+        df_map['co2_kg'] = pd.to_numeric(df_map['co2_kg'], errors='coerce')
+        df_map['distance_km'] = pd.to_numeric(df_map['distance_km'], errors='coerce')
         
-        fig_map.update_layout(
-            mapbox=dict(
-                center=dict(lat=39.8283, lon=-98.5795)  # Center of US
-            ),
-            height=500
-        )
+        # Calculate carbon intensity only for valid numeric data
+        df_map = df_map.dropna(subset=['co2_kg', 'distance_km'])
+        df_map['carbon_intensity'] = df_map['co2_kg'] / df_map['distance_km']
         
-        st.plotly_chart(fig_map, use_container_width=True)
+        # Ensure coordinates are numeric
+        df_map['origin_lat'] = pd.to_numeric(df_map['origin_lat'], errors='coerce')
+        df_map['origin_lng'] = pd.to_numeric(df_map['origin_lng'], errors='coerce')
+        df_map = df_map.dropna(subset=['origin_lat', 'origin_lng', 'carbon_intensity'])
+        
+        # Convert carbon_intensity to float to ensure it's numeric
+        df_map['carbon_intensity'] = df_map['carbon_intensity'].astype(float)
+        
+        if not df_map.empty:
+            # Create map
+            fig_map = px.scatter_mapbox(
+                df_map,
+                lat='origin_lat',
+                lon='origin_lng',
+                size='carbon_intensity',
+                color='transport_mode',
+                hover_data=['distance_km', 'co2_kg', 'package_type'],
+                title="Carbon Intensity by Origin Location",
+                mapbox_style="carto-positron",
+                zoom=3
+            )
+            
+            fig_map.update_layout(
+                mapbox=dict(
+                    center=dict(lat=39.8283, lon=-98.5795)  # Center of US
+                ),
+                height=500
+            )
+            
+            st.plotly_chart(fig_map, use_container_width=True)
+        else:
+            st.warning("No valid coordinate data available for map visualization.")
         
         # Statistics
         col1, col2 = st.columns(2)
         
         with col1:
             st.subheader("📋 Summary Statistics")
-            stats_df = df[['co2_kg', 'distance_km', 'weight_kg']].describe()
-            st.dataframe(stats_df, use_container_width=True)
+            
+            # Clean data for statistics
+            df_stats = df.copy()
+            df_stats['co2_kg'] = pd.to_numeric(df_stats['co2_kg'], errors='coerce')
+            df_stats['distance_km'] = pd.to_numeric(df_stats['distance_km'], errors='coerce')
+            df_stats['weight_kg'] = pd.to_numeric(df_stats['weight_kg'], errors='coerce')
+            df_stats = df_stats.dropna(subset=['co2_kg', 'distance_km', 'weight_kg'])
+            
+            if not df_stats.empty:
+                stats_df = df_stats[['co2_kg', 'distance_km', 'weight_kg']].describe()
+                st.dataframe(stats_df, use_container_width=True)
+            else:
+                st.warning("No valid data available for statistics.")
         
         with col2:
             st.subheader("🏆 Top Performers")
             
             # Most efficient shipments (lowest emissions per km)
-            df['efficiency'] = df['co2_kg'] / df['distance_km']
-            efficient_shipments = df.nsmallest(5, 'efficiency')[['shipment_id', 'transport_mode', 'distance_km', 'co2_kg', 'efficiency']]
-            efficient_shipments['efficiency'] = efficient_shipments['efficiency'].round(4)
-            efficient_shipments['shipment_id'] = efficient_shipments['shipment_id'].astype(str).str[:8] + '...'
+            df_efficiency = df.copy()
+            df_efficiency['co2_kg'] = pd.to_numeric(df_efficiency['co2_kg'], errors='coerce')
+            df_efficiency['distance_km'] = pd.to_numeric(df_efficiency['distance_km'], errors='coerce')
+            df_efficiency = df_efficiency.dropna(subset=['co2_kg', 'distance_km'])
             
-            st.dataframe(efficient_shipments, use_container_width=True)
+            if not df_efficiency.empty:
+                df_efficiency['efficiency'] = df_efficiency['co2_kg'] / df_efficiency['distance_km']
+                efficient_shipments = df_efficiency.nsmallest(5, 'efficiency')[['shipment_id', 'transport_mode', 'distance_km', 'co2_kg', 'efficiency']]
+                efficient_shipments['efficiency'] = efficient_shipments['efficiency'].round(4)
+                efficient_shipments['shipment_id'] = efficient_shipments['shipment_id'].astype(str).str[:8] + '...'
+                
+                st.dataframe(efficient_shipments, use_container_width=True)
+            else:
+                st.warning("No valid data available for efficiency analysis.")
         
         # Recent shipments table
         st.subheader("📋 Recent Shipments")
