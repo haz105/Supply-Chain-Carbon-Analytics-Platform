@@ -3,7 +3,7 @@ Main ETL pipeline runner for the Supply Chain Carbon Analytics Platform.
 Generates, validates, transforms, and ingests synthetic shipment data.
 """
 
-from datetime import datetime
+from datetime import datetime, timedelta
 from data_generators.shipment_generator import ShipmentGenerator
 from etl.data_quality import DataQualityChecker
 from etl.transformations import DataTransformationPipeline
@@ -23,10 +23,14 @@ def run_etl_pipeline(num_shipments: int = 1000):
     # 1. Generate synthetic shipment data
     generator = ShipmentGenerator()
     today = datetime.now()
+    # Use a past date range to avoid generating future dates
+    start_date = today - timedelta(days=30)  # Start 30 days ago
+    end_date = today - timedelta(days=1)     # End yesterday
+    
     shipments = generator.generate_shipments(
         num_shipments=num_shipments,
-        start_date=today.replace(hour=0, minute=0, second=0, microsecond=0),
-        end_date=today.replace(hour=23, minute=59, second=59, microsecond=999999),
+        start_date=start_date,
+        end_date=end_date,
         include_seasonal_patterns=True
     )
     logger.info("Generated synthetic shipments", count=len(shipments))

@@ -8,7 +8,7 @@ import sys
 import subprocess
 import time
 import requests
-from datetime import datetime, date
+from datetime import datetime, date, timedelta
 import structlog
 
 # Configure logging
@@ -57,12 +57,16 @@ class PlatformTester:
         """Run database migrations."""
         print("🔍 Running database migrations...")
         try:
-            # Initialize alembic if not already done
-            if not os.path.exists("alembic/versions"):
+            # Check if alembic is already initialized
+            if not os.path.exists("alembic.ini"):
                 subprocess.run(["alembic", "init", "alembic"], check=True)
             
-            # Create initial migration
-            subprocess.run(["alembic", "revision", "--autogenerate", "-m", "Initial migration"], check=True)
+            # Create versions directory if it doesn't exist
+            os.makedirs("alembic/versions", exist_ok=True)
+            
+            # Create initial migration if no versions exist
+            if not os.path.exists("alembic/versions") or not os.listdir("alembic/versions"):
+                subprocess.run(["alembic", "revision", "--autogenerate", "-m", "Initial migration"], check=True)
             
             # Run migrations
             subprocess.run(["alembic", "upgrade", "head"], check=True)
@@ -82,6 +86,26 @@ class PlatformTester:
             from etl.main import run_etl_pipeline
             run_etl_pipeline(num_shipments=100)  # Generate 100 shipments for testing
             
+            # Verify data was created
+            from database.connection import get_db_session
+            from sqlalchemy import text
+            
+            session = get_db_session()
+            try:
+                # Check if shipments table has data
+                result = session.execute(text("SELECT COUNT(*) FROM shipments")).scalar()
+                print(f"  📊 Generated {result} shipments")
+                
+                # Check if carbon_emissions table has data
+                result = session.execute(text("SELECT COUNT(*) FROM carbon_emissions")).scalar()
+                print(f"  📊 Generated {result} carbon emissions records")
+                
+                if result == 0:
+                    print("  ⚠️ Warning: No carbon emissions data found")
+                    
+            finally:
+                session.close()
+            
             self.test_results['sample_data'] = True
             print("✅ Sample data generation: SUCCESS")
             return True
@@ -94,27 +118,53 @@ class PlatformTester:
         """Start the FastAPI server in the background."""
         print("🔍 Starting API server...")
         try:
+            # Check if server is already running
+            try:
+                response = requests.get(f"{self.base_url}/health", timeout=2)
+                if response.status_code == 200:
+                    print("✅ API server: SUCCESS (already running)")
+                    self.test_results['api_server'] = True
+                    return True
+            except requests.exceptions.RequestException:
+                pass  # Server not running, continue to start it
+            
             # Start the server in the background
             import subprocess
             import sys
             
             # Use python -m uvicorn for better compatibility
+            # Use localhost instead of 0.0.0.0 for better Windows compatibility
             self.api_process = subprocess.Popen([
                 sys.executable, "-m", "uvicorn", "api.main:app", 
-                "--host", "0.0.0.0", "--port", "8000", "--reload"
-            ], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+                "--host", "127.0.0.1", "--port", "8000", "--reload"
+            ], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
             
-            # Wait for server to start
-            time.sleep(5)
+            # Wait for server to start with better error handling
+            print("  Waiting for server to start...")
+            max_attempts = 10
+            for attempt in range(max_attempts):
+                try:
+                    time.sleep(2)  # Wait 2 seconds between attempts
+                    response = requests.get(f"{self.base_url}/health", timeout=5)
+                    if response.status_code == 200:
+                        self.test_results['api_server'] = True
+                        print("✅ API server: SUCCESS")
+                        return True
+                except requests.exceptions.RequestException:
+                    if attempt < max_attempts - 1:
+                        print(f"  Attempt {attempt + 1}/{max_attempts}: Server not ready yet...")
+                    continue
             
-            # Test if server is responding
-            response = requests.get(f"{self.base_url}/health", timeout=10)
-            if response.status_code == 200:
-                self.test_results['api_server'] = True
-                print("✅ API server: SUCCESS")
-                return True
-            else:
-                raise Exception(f"Server responded with status {response.status_code}")
+            # If we get here, server didn't start properly
+            # Check if there are any error messages
+            try:
+                stdout, stderr = self.api_process.communicate(timeout=1)
+                if stderr:
+                    print(f"  Server error output: {stderr}")
+            except subprocess.TimeoutExpired:
+                pass
+            
+            raise Exception("Server failed to start within expected time")
                 
         except Exception as e:
             print(f"❌ API server failed: {e}")
@@ -149,6 +199,11 @@ class PlatformTester:
                 print("  ✅ Emissions summary endpoint: SUCCESS")
             else:
                 print(f"  ❌ Emissions summary endpoint: FAILED (status {response.status_code})")
+                try:
+                    error_detail = response.json()
+                    print(f"     Error: {error_detail}")
+                except:
+                    print(f"     Response: {response.text[:200]}")
             
             # Test route optimization endpoint
             endpoints_tested += 1
@@ -194,27 +249,51 @@ class PlatformTester:
             from etl.main import run_etl_pipeline
             run_etl_pipeline(num_shipments=50)
             
-            # Test that data appears in API
-            payload = {
-                "start_date": date.today().replace(day=1).isoformat(),
-                "end_date": date.today().isoformat()
-            }
-            response = requests.post(f"{self.base_url}/emissions/summary", json=payload)
+            # Wait a moment for data to be processed
+            time.sleep(2)
             
-            if response.status_code == 200:
-                data = response.json()
-                if data['shipment_count'] > 0:
-                    self.test_results['data_flow'] = True
-                    print(f"✅ Data flow: SUCCESS ({data['shipment_count']} shipments found)")
-                    return True
-                else:
-                    print("❌ Data flow: FAILED (no shipments found)")
-                    self.test_results['data_flow'] = False
-                    return False
-            else:
-                print(f"❌ Data flow: FAILED (API error {response.status_code})")
-                self.test_results['data_flow'] = False
-                return False
+            # Test that data appears in API
+            # Use a date range that matches the generated data (past 30 days)
+            end_date = date.today() - timedelta(days=1)  # Yesterday
+            start_date = end_date - timedelta(days=30)   # 30 days ago
+            
+            payload = {
+                "start_date": start_date.isoformat(),
+                "end_date": end_date.isoformat()
+            }
+            
+            # Try multiple times with timeout
+            max_attempts = 5
+            for attempt in range(max_attempts):
+                try:
+                    response = requests.post(f"{self.base_url}/emissions/summary", json=payload, timeout=30)
+                    
+                    if response.status_code == 200:
+                        data = response.json()
+                        if data['shipment_count'] > 0:
+                            self.test_results['data_flow'] = True
+                            print(f"✅ Data flow: SUCCESS ({data['shipment_count']} shipments found)")
+                            return True
+                        else:
+                            print(f"  Attempt {attempt + 1}/{max_attempts}: No shipments found yet...")
+                            if attempt < max_attempts - 1:
+                                time.sleep(3)  # Wait longer between attempts
+                            continue
+                    else:
+                        print(f"  Attempt {attempt + 1}/{max_attempts}: API error {response.status_code}")
+                        if attempt < max_attempts - 1:
+                            time.sleep(3)
+                        continue
+                        
+                except requests.exceptions.RequestException as e:
+                    print(f"  Attempt {attempt + 1}/{max_attempts}: Request failed - {e}")
+                    if attempt < max_attempts - 1:
+                        time.sleep(3)
+                    continue
+            
+            print("❌ Data flow: FAILED (no shipments found after multiple attempts)")
+            self.test_results['data_flow'] = False
+            return False
                 
         except Exception as e:
             print(f"❌ Data flow test failed: {e}")

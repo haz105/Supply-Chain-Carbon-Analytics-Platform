@@ -20,13 +20,17 @@ def check_dependencies():
     """Check if required dependencies are installed."""
     required_packages = [
         'fastapi', 'uvicorn', 'sqlalchemy', 'alembic', 'psycopg2-binary',
-        'pandas', 'numpy', 'requests', 'structlog', 'pydantic'
+        'pandas', 'numpy', 'requests', 'structlog', 'pydantic', 'pydantic-settings'
     ]
     
     missing_packages = []
     for package in required_packages:
         try:
-            __import__(package.replace('-', '_'))
+            # Handle special cases for package imports
+            if package == 'psycopg2-binary':
+                __import__('psycopg2')
+            else:
+                __import__(package.replace('-', '_'))
             print(f"✅ {package} is installed")
         except ImportError:
             missing_packages.append(package)
@@ -92,27 +96,69 @@ def check_docker():
         return False
 
 def setup_database():
-    """Set up database using Docker Compose."""
-    if not check_docker():
+    """Test database connection."""
+    print("🔍 Testing database connection...")
+    
+    # Load environment variables
+    from dotenv import load_dotenv
+    load_dotenv()
+    
+    database_url = os.getenv('DATABASE_URL')
+    if not database_url:
+        print("❌ DATABASE_URL not found in .env file")
         print("📋 To set up the database manually:")
         print("   1. Install PostgreSQL")
-        print("   2. Create database 'carbon_analytics'")
-        print("   3. Update DATABASE_URL in .env file")
+        print("   2. Create database 'supply_chain_carbon'")
+        print("   3. Create user 'supply_chain_user' with password 'supply_chain_password'")
+        print("   4. Update DATABASE_URL in .env file")
         return False
     
-    print("🐳 Setting up database with Docker Compose...")
     try:
-        # Start PostgreSQL
-        subprocess.run(["docker-compose", "up", "-d", "postgres"], check=True)
-        print("✅ PostgreSQL started successfully")
+        # Test database connection
+        from sqlalchemy import create_engine, text
+        from sqlalchemy.exc import OperationalError
         
-        # Wait for database to be ready
-        import time
-        time.sleep(5)
+        engine = create_engine(database_url)
+        with engine.connect() as conn:
+            result = conn.execute(text("SELECT version()"))
+            row = result.fetchone()
+            if row:
+                version = row[0]
+                print(f"✅ Database connection successful")
+                print(f"   PostgreSQL version: {version.split(',')[0]}")
+            else:
+                print("❌ Could not retrieve database version")
+                return False
+        
+        # Test if tables exist (they won't initially, but connection should work)
+        try:
+            with engine.connect() as conn:
+                result = conn.execute(text("SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = 'public'"))
+                row = result.fetchone()
+                if row:
+                    table_count = row[0]
+                    print(f"   Tables in database: {table_count}")
+                else:
+                    print("   Note: Could not count tables")
+        except Exception as e:
+            print(f"   Note: No tables exist yet (this is normal for new database)")
         
         return True
-    except subprocess.CalledProcessError as e:
-        print(f"❌ Failed to start database: {e}")
+        
+    except ImportError:
+        print("❌ SQLAlchemy not available. Install with: pip install sqlalchemy")
+        return False
+    except OperationalError as e:
+        print(f"❌ Database connection failed: {e}")
+        print("📋 To set up the database manually:")
+        print("   1. Ensure PostgreSQL is running")
+        print("   2. Create database 'supply_chain_carbon'")
+        print("   3. Create user 'supply_chain_user' with password 'supply_chain_password'")
+        print("   4. Grant privileges to user")
+        print("   5. Update DATABASE_URL in .env file")
+        return False
+    except Exception as e:
+        print(f"❌ Database setup failed: {e}")
         return False
 
 def main():

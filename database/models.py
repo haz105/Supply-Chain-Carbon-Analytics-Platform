@@ -8,11 +8,11 @@ from typing import Optional, List
 from uuid import uuid4
 from sqlalchemy import (
     Column, String, Integer, Float, DateTime, Date, Boolean, 
-    ForeignKey, Text, Index, CheckConstraint, UniqueConstraint
+    ForeignKey, Text, Index, CheckConstraint, UniqueConstraint, DECIMAL
 )
-from sqlalchemy.dialects.postgresql import UUID, DECIMAL
+from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.ext.declarative import declarative_base
-from sqlalchemy.orm import relationship, Mapped
+from sqlalchemy.orm import relationship, Mapped, mapped_column
 from sqlalchemy.sql import func
 
 Base = declarative_base()
@@ -24,35 +24,35 @@ class Shipment(Base):
     __tablename__ = "shipments"
     
     # Primary key
-    shipment_id: Mapped[str] = Column(UUID(as_uuid=False), primary_key=True, default=lambda: str(uuid4()))
+    shipment_id: Mapped[str] = mapped_column(UUID(as_uuid=False), primary_key=True, default=lambda: str(uuid4()))
     
     # Location data
-    origin_lat: Mapped[float] = Column(DECIMAL(10, 8), nullable=False)
-    origin_lng: Mapped[float] = Column(DECIMAL(11, 8), nullable=False)
-    destination_lat: Mapped[float] = Column(DECIMAL(10, 8), nullable=False)
-    destination_lng: Mapped[float] = Column(DECIMAL(11, 8), nullable=False)
+    origin_lat: Mapped[float] = mapped_column(DECIMAL(10, 8), nullable=False)
+    origin_lng: Mapped[float] = mapped_column(DECIMAL(11, 8), nullable=False)
+    destination_lat: Mapped[float] = mapped_column(DECIMAL(10, 8), nullable=False)
+    destination_lng: Mapped[float] = mapped_column(DECIMAL(11, 8), nullable=False)
     
     # Transportation details
-    transport_mode: Mapped[str] = Column(String(50), nullable=False)  # air, ground, sea
-    weight_kg: Mapped[float] = Column(DECIMAL(10, 2), nullable=False)
-    distance_km: Mapped[float] = Column(DECIMAL(10, 2), nullable=False)
-    package_type: Mapped[str] = Column(String(50), nullable=False)
+    transport_mode: Mapped[str] = mapped_column(String(50), nullable=False)  # air, ground, sea
+    weight_kg: Mapped[float] = mapped_column(DECIMAL(10, 2), nullable=False)
+    distance_km: Mapped[float] = mapped_column(DECIMAL(10, 2), nullable=False)
+    package_type: Mapped[str] = mapped_column(String(50), nullable=False)
     
     # Timing
-    departure_time: Mapped[datetime] = Column(DateTime, nullable=False)
-    arrival_time: Mapped[datetime] = Column(DateTime, nullable=False)
+    departure_time: Mapped[datetime] = mapped_column(DateTime, nullable=False)
+    arrival_time: Mapped[datetime] = mapped_column(DateTime, nullable=False)
     
     # Relationships
-    carrier_id: Mapped[Optional[str]] = Column(UUID(as_uuid=False), nullable=True)
-    supplier_id: Mapped[Optional[str]] = Column(
+    carrier_id: Mapped[Optional[str]] = mapped_column(UUID(as_uuid=False), nullable=True)
+    supplier_id: Mapped[Optional[str]] = mapped_column(
         UUID(as_uuid=False), 
         ForeignKey("suppliers.supplier_id"), 
         nullable=True
     )
     
     # Metadata
-    created_at: Mapped[datetime] = Column(DateTime, default=func.now())
-    updated_at: Mapped[datetime] = Column(DateTime, default=func.now(), onupdate=func.now())
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=func.now(), onupdate=func.now())
     
     # Relationships
     carbon_emissions: Mapped[List["CarbonEmission"]] = relationship("CarbonEmission", back_populates="shipment")
@@ -75,28 +75,28 @@ class CarbonEmission(Base):
     __tablename__ = "carbon_emissions"
     
     # Primary key
-    emission_id: Mapped[str] = Column(UUID(as_uuid=False), primary_key=True, default=lambda: str(uuid4()))
+    emission_id: Mapped[str] = mapped_column(UUID(as_uuid=False), primary_key=True, default=lambda: str(uuid4()))
     
     # Foreign key
-    shipment_id: Mapped[str] = Column(
+    shipment_id: Mapped[str] = mapped_column(
         UUID(as_uuid=False), 
         ForeignKey("shipments.shipment_id"), 
         nullable=False
     )
     
     # Emission values (kg)
-    co2_kg: Mapped[float] = Column(DECIMAL(10, 6), nullable=False)
-    ch4_kg: Mapped[float] = Column(DECIMAL(10, 6), nullable=False, default=0)
-    n2o_kg: Mapped[float] = Column(DECIMAL(10, 6), nullable=False, default=0)
-    co2_equivalent_kg: Mapped[float] = Column(DECIMAL(10, 6), nullable=False)
+    co2_kg: Mapped[float] = mapped_column(DECIMAL(10, 6), nullable=False)
+    ch4_kg: Mapped[float] = mapped_column(DECIMAL(10, 6), nullable=False, default=0)
+    n2o_kg: Mapped[float] = mapped_column(DECIMAL(10, 6), nullable=False, default=0)
+    co2_equivalent_kg: Mapped[float] = mapped_column(DECIMAL(10, 6), nullable=False)
     
     # Calculation metadata
-    emission_factor_source: Mapped[str] = Column(String(100), nullable=False)
-    calculation_method: Mapped[str] = Column(String(100), nullable=False)
-    weather_impact_factor: Mapped[float] = Column(DECIMAL(5, 4), nullable=False, default=1.0)
+    emission_factor_source: Mapped[str] = mapped_column(String(100), nullable=False)
+    calculation_method: Mapped[str] = mapped_column(String(100), nullable=False)
+    weather_impact_factor: Mapped[float] = mapped_column(DECIMAL(5, 4), nullable=False, default=1.0)
     
     # Metadata
-    calculated_at: Mapped[datetime] = Column(DateTime, default=func.now())
+    calculated_at: Mapped[datetime] = mapped_column(DateTime, default=func.now())
     
     # Relationships
     shipment: Mapped["Shipment"] = relationship("Shipment", back_populates="carbon_emissions")
@@ -117,31 +117,31 @@ class Supplier(Base):
     __tablename__ = "suppliers"
     
     # Primary key
-    supplier_id: Mapped[str] = Column(UUID(as_uuid=False), primary_key=True, default=lambda: str(uuid4()))
+    supplier_id: Mapped[str] = mapped_column(UUID(as_uuid=False), primary_key=True, default=lambda: str(uuid4()))
     
     # Basic information
-    name: Mapped[str] = Column(String(255), nullable=False)
-    location_lat: Mapped[float] = Column(DECIMAL(10, 8), nullable=False)
-    location_lng: Mapped[float] = Column(DECIMAL(11, 8), nullable=False)
+    name: Mapped[str] = mapped_column(String(255), nullable=False)
+    location_lat: Mapped[float] = mapped_column(DECIMAL(10, 8), nullable=False)
+    location_lng: Mapped[float] = mapped_column(DECIMAL(11, 8), nullable=False)
     
     # Sustainability metrics
-    sustainability_score: Mapped[int] = Column(Integer, nullable=False)  # 1-100
-    renewable_energy_percent: Mapped[float] = Column(DECIMAL(5, 2), nullable=False, default=0)
-    carbon_intensity_kg_per_dollar: Mapped[float] = Column(DECIMAL(10, 6), nullable=False, default=0)
-    certification_level: Mapped[str] = Column(String(50), nullable=False, default="None")  # None, Bronze, Silver, Gold
+    sustainability_score: Mapped[int] = mapped_column(Integer, nullable=False)  # 1-100
+    renewable_energy_percent: Mapped[float] = mapped_column(DECIMAL(5, 2), nullable=False, default=0)
+    carbon_intensity_kg_per_dollar: Mapped[float] = mapped_column(DECIMAL(10, 6), nullable=False, default=0)
+    certification_level: Mapped[str] = mapped_column(String(50), nullable=False, default="None")  # None, Bronze, Silver, Gold
     
     # Audit information
-    last_audit_date: Mapped[Optional[date]] = Column(Date, nullable=True)
-    audit_score: Mapped[Optional[int]] = Column(Integer, nullable=True)  # 1-100
+    last_audit_date: Mapped[Optional[date]] = mapped_column(Date, nullable=True)
+    audit_score: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)  # 1-100
     
     # Additional ESG metrics
-    waste_reduction_percent: Mapped[float] = Column(DECIMAL(5, 2), nullable=False, default=0)
-    water_efficiency_score: Mapped[int] = Column(Integer, nullable=False, default=0)  # 1-100
-    social_responsibility_score: Mapped[int] = Column(Integer, nullable=False, default=0)  # 1-100
+    waste_reduction_percent: Mapped[float] = mapped_column(DECIMAL(5, 2), nullable=False, default=0)
+    water_efficiency_score: Mapped[int] = mapped_column(Integer, nullable=False, default=0)  # 1-100
+    social_responsibility_score: Mapped[int] = mapped_column(Integer, nullable=False, default=0)  # 1-100
     
     # Metadata
-    created_at: Mapped[datetime] = Column(DateTime, default=func.now())
-    updated_at: Mapped[datetime] = Column(DateTime, default=func.now(), onupdate=func.now())
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=func.now(), onupdate=func.now())
     
     # Relationships
     shipments: Mapped[List["Shipment"]] = relationship("Shipment", back_populates="supplier")
@@ -167,27 +167,27 @@ class WeatherData(Base):
     __tablename__ = "weather_data"
     
     # Primary key
-    weather_id: Mapped[str] = Column(UUID(as_uuid=False), primary_key=True, default=lambda: str(uuid4()))
+    weather_id: Mapped[str] = mapped_column(UUID(as_uuid=False), primary_key=True, default=lambda: str(uuid4()))
     
     # Location and time
-    location_lat: Mapped[float] = Column(DECIMAL(10, 8), nullable=False)
-    location_lng: Mapped[float] = Column(DECIMAL(11, 8), nullable=False)
-    recorded_at: Mapped[datetime] = Column(DateTime, nullable=False)
+    location_lat: Mapped[float] = mapped_column(DECIMAL(10, 8), nullable=False)
+    location_lng: Mapped[float] = mapped_column(DECIMAL(11, 8), nullable=False)
+    recorded_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)
     
     # Weather conditions
-    temperature_celsius: Mapped[float] = Column(DECIMAL(5, 2), nullable=False)
-    humidity_percent: Mapped[float] = Column(DECIMAL(5, 2), nullable=False)
-    wind_speed_kmh: Mapped[float] = Column(DECIMAL(6, 2), nullable=False)
-    wind_direction_degrees: Mapped[float] = Column(DECIMAL(6, 2), nullable=False)
-    precipitation_mm: Mapped[float] = Column(DECIMAL(8, 2), nullable=False, default=0)
+    temperature_celsius: Mapped[float] = mapped_column(DECIMAL(5, 2), nullable=False)
+    humidity_percent: Mapped[float] = mapped_column(DECIMAL(5, 2), nullable=False)
+    wind_speed_kmh: Mapped[float] = mapped_column(DECIMAL(6, 2), nullable=False)
+    wind_direction_degrees: Mapped[float] = mapped_column(DECIMAL(6, 2), nullable=False)
+    precipitation_mm: Mapped[float] = mapped_column(DECIMAL(8, 2), nullable=False, default=0)
     
     # Impact factors
-    fuel_efficiency_impact: Mapped[float] = Column(DECIMAL(5, 4), nullable=False, default=1.0)
-    route_delay_minutes: Mapped[int] = Column(Integer, nullable=False, default=0)
+    fuel_efficiency_impact: Mapped[float] = mapped_column(DECIMAL(5, 4), nullable=False, default=1.0)
+    route_delay_minutes: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     
     # Metadata
-    source: Mapped[str] = Column(String(100), nullable=False, default="OpenWeatherMap")
-    created_at: Mapped[datetime] = Column(DateTime, default=func.now())
+    source: Mapped[str] = mapped_column(String(100), nullable=False, default="OpenWeatherMap")
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=func.now())
     
     # Constraints
     __table_args__ = (
@@ -206,33 +206,33 @@ class RouteOptimization(Base):
     __tablename__ = "route_optimizations"
     
     # Primary key
-    optimization_id: Mapped[str] = Column(UUID(as_uuid=False), primary_key=True, default=lambda: str(uuid4()))
+    optimization_id: Mapped[str] = mapped_column(UUID(as_uuid=False), primary_key=True, default=lambda: str(uuid4()))
     
     # Route details
-    origin_lat: Mapped[float] = Column(DECIMAL(10, 8), nullable=False)
-    origin_lng: Mapped[float] = Column(DECIMAL(11, 8), nullable=False)
-    destination_lat: Mapped[float] = Column(DECIMAL(10, 8), nullable=False)
-    destination_lng: Mapped[float] = Column(DECIMAL(11, 8), nullable=False)
+    origin_lat: Mapped[float] = mapped_column(DECIMAL(10, 8), nullable=False)
+    origin_lng: Mapped[float] = mapped_column(DECIMAL(11, 8), nullable=False)
+    destination_lat: Mapped[float] = mapped_column(DECIMAL(10, 8), nullable=False)
+    destination_lng: Mapped[float] = mapped_column(DECIMAL(11, 8), nullable=False)
     
     # Optimization parameters
-    weight_kg: Mapped[float] = Column(DECIMAL(10, 2), nullable=False)
-    priority: Mapped[str] = Column(String(50), nullable=False)  # cost, carbon, balanced
-    constraints: Mapped[str] = Column(Text, nullable=True)  # JSON string of constraints
+    weight_kg: Mapped[float] = mapped_column(DECIMAL(10, 2), nullable=False)
+    priority: Mapped[str] = mapped_column(String(50), nullable=False)  # cost, carbon, balanced
+    constraints: Mapped[str] = mapped_column(Text, nullable=True)  # JSON string of constraints
     
     # Results
-    optimal_route: Mapped[str] = Column(Text, nullable=False)  # JSON string of route waypoints
-    total_distance_km: Mapped[float] = Column(DECIMAL(10, 2), nullable=False)
-    estimated_cost_usd: Mapped[float] = Column(DECIMAL(10, 2), nullable=False)
-    estimated_carbon_kg: Mapped[float] = Column(DECIMAL(10, 6), nullable=False)
-    estimated_duration_hours: Mapped[float] = Column(DECIMAL(6, 2), nullable=False)
+    optimal_route: Mapped[str] = mapped_column(Text, nullable=False)  # JSON string of route waypoints
+    total_distance_km: Mapped[float] = mapped_column(DECIMAL(10, 2), nullable=False)
+    estimated_cost_usd: Mapped[float] = mapped_column(DECIMAL(10, 2), nullable=False)
+    estimated_carbon_kg: Mapped[float] = mapped_column(DECIMAL(10, 6), nullable=False)
+    estimated_duration_hours: Mapped[float] = mapped_column(DECIMAL(6, 2), nullable=False)
     
     # Alternative routes
-    alternative_routes: Mapped[Optional[str]] = Column(Text, nullable=True)  # JSON string of alternatives
+    alternative_routes: Mapped[Optional[str]] = mapped_column(Text, nullable=True)  # JSON string of alternatives
     
     # Metadata
-    algorithm_used: Mapped[str] = Column(String(100), nullable=False)
-    optimization_time_seconds: Mapped[float] = Column(DECIMAL(8, 3), nullable=False)
-    created_at: Mapped[datetime] = Column(DateTime, default=func.now())
+    algorithm_used: Mapped[str] = mapped_column(String(100), nullable=False)
+    optimization_time_seconds: Mapped[float] = mapped_column(DECIMAL(8, 3), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=func.now())
     
     # Constraints
     __table_args__ = (
@@ -253,33 +253,33 @@ class ScenarioAnalysis(Base):
     __tablename__ = "scenario_analyses"
     
     # Primary key
-    scenario_id: Mapped[str] = Column(UUID(as_uuid=False), primary_key=True, default=lambda: str(uuid4()))
+    scenario_id: Mapped[str] = mapped_column(UUID(as_uuid=False), primary_key=True, default=lambda: str(uuid4()))
     
     # Scenario details
-    scenario_name: Mapped[str] = Column(String(255), nullable=False)
-    scenario_type: Mapped[str] = Column(String(100), nullable=False)  # carbon_reduction, cost_optimization, etc.
-    description: Mapped[str] = Column(Text, nullable=True)
+    scenario_name: Mapped[str] = mapped_column(String(255), nullable=False)
+    scenario_type: Mapped[str] = mapped_column(String(100), nullable=False)  # carbon_reduction, cost_optimization, etc.
+    description: Mapped[str] = mapped_column(Text, nullable=True)
     
     # Parameters
-    parameters: Mapped[str] = Column(Text, nullable=False)  # JSON string of scenario parameters
-    time_horizon_months: Mapped[int] = Column(Integer, nullable=False)
+    parameters: Mapped[str] = mapped_column(Text, nullable=False)  # JSON string of scenario parameters
+    time_horizon_months: Mapped[int] = mapped_column(Integer, nullable=False)
     
     # Results
-    baseline_carbon_kg: Mapped[float] = Column(DECIMAL(15, 6), nullable=False)
-    scenario_carbon_kg: Mapped[float] = Column(DECIMAL(15, 6), nullable=False)
-    carbon_reduction_percent: Mapped[float] = Column(DECIMAL(5, 2), nullable=False)
+    baseline_carbon_kg: Mapped[float] = mapped_column(DECIMAL(15, 6), nullable=False)
+    scenario_carbon_kg: Mapped[float] = mapped_column(DECIMAL(15, 6), nullable=False)
+    carbon_reduction_percent: Mapped[float] = mapped_column(DECIMAL(5, 2), nullable=False)
     
-    baseline_cost_usd: Mapped[float] = Column(DECIMAL(15, 2), nullable=False)
-    scenario_cost_usd: Mapped[float] = Column(DECIMAL(15, 2), nullable=False)
-    cost_impact_percent: Mapped[float] = Column(DECIMAL(8, 2), nullable=False)
+    baseline_cost_usd: Mapped[float] = mapped_column(DECIMAL(15, 2), nullable=False)
+    scenario_cost_usd: Mapped[float] = mapped_column(DECIMAL(15, 2), nullable=False)
+    cost_impact_percent: Mapped[float] = mapped_column(DECIMAL(8, 2), nullable=False)
     
     # Additional metrics
-    roi_percent: Mapped[Optional[float]] = Column(DECIMAL(8, 2), nullable=True)
-    payback_period_months: Mapped[Optional[int]] = Column(Integer, nullable=True)
+    roi_percent: Mapped[Optional[float]] = mapped_column(DECIMAL(8, 2), nullable=True)
+    payback_period_months: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
     
     # Metadata
-    created_at: Mapped[datetime] = Column(DateTime, default=func.now())
-    created_by: Mapped[str] = Column(String(255), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=func.now())
+    created_by: Mapped[str] = mapped_column(String(255), nullable=False)
     
     # Constraints
     __table_args__ = (

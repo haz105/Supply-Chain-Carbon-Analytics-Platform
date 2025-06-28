@@ -3,8 +3,8 @@ Database connection and session management for the Supply Chain Carbon Analytics
 Provides SQLAlchemy session factory and connection pooling.
 """
 
-from typing import Generator
-from sqlalchemy import create_engine
+from typing import Generator, Optional
+from sqlalchemy import create_engine, text
 from sqlalchemy.orm import sessionmaker, Session
 from sqlalchemy.pool import QueuePool
 from contextlib import contextmanager
@@ -13,15 +13,19 @@ import structlog
 from config.settings import get_settings
 
 logger = structlog.get_logger(__name__)
-settings = get_settings()
 
 
 class DatabaseManager:
     """Database connection manager with connection pooling and session management."""
     
-    def __init__(self, database_url: str = None):
+    def __init__(self, database_url: Optional[str] = None):
         """Initialize database manager with connection URL."""
-        self.database_url = database_url or settings.database.url
+        try:
+            settings = get_settings()
+            self.database_url = database_url or settings.database.url
+        except Exception as e:
+            logger.error("Failed to load settings", error=str(e))
+            raise
         self.engine = None
         self.SessionLocal = None
         self._initialize_engine()
@@ -29,6 +33,7 @@ class DatabaseManager:
     def _initialize_engine(self) -> None:
         """Initialize SQLAlchemy engine with connection pooling."""
         try:
+            settings = get_settings()
             self.engine = create_engine(
                 self.database_url,
                 poolclass=QueuePool,
@@ -63,6 +68,8 @@ class DatabaseManager:
         """Get a new database session."""
         if not self.SessionLocal:
             self._initialize_engine()
+        if not self.SessionLocal:
+            raise RuntimeError("Failed to initialize database session")
         return self.SessionLocal()
     
     @contextmanager
@@ -83,7 +90,7 @@ class DatabaseManager:
         """Test database connection."""
         try:
             with self.get_db_session() as session:
-                session.execute("SELECT 1")
+                session.execute(text("SELECT 1"))
             logger.info("Database connection test successful")
             return True
         except Exception as e:

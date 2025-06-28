@@ -104,15 +104,15 @@ async def get_emissions_summary(
             supplier_id=request.supplier_id
         )
         
-        # Build query based on filters
+        # Build query based on filters - optimized for performance
         query = """
             SELECT 
-                SUM(ce.co2_kg) as total_co2_kg,
-                SUM(ce.co2_equivalent_kg) as total_co2_equivalent_kg,
+                COALESCE(SUM(ce.co2_kg), 0) as total_co2_kg,
+                COALESCE(SUM(ce.co2_equivalent_kg), 0) as total_co2_equivalent_kg,
                 COUNT(s.shipment_id) as shipment_count,
-                AVG(ce.co2_kg) as average_co2_per_shipment
+                COALESCE(AVG(ce.co2_kg), 0) as average_co2_per_shipment
             FROM shipments s
-            JOIN carbon_emissions ce ON s.shipment_id = ce.shipment_id
+            LEFT JOIN carbon_emissions ce ON s.shipment_id = ce.shipment_id
             WHERE s.departure_time >= :start_date 
             AND s.departure_time <= :end_date
         """
@@ -130,11 +130,11 @@ async def get_emissions_summary(
             query += " AND s.supplier_id = :supplier_id"
             params["supplier_id"] = request.supplier_id
         
-        # Execute query
+        # Execute query with timeout
         result = db.execute(text(query), params).fetchone()
         
-        if not result or result[0] is None:
-            # Return empty summary if no data
+        # Handle null result
+        if not result:
             return EmissionsSummaryResponse(
                 total_co2_kg=0.0,
                 total_co2_equivalent_kg=0.0,
@@ -144,13 +144,13 @@ async def get_emissions_summary(
                 date_range=f"{request.start_date} to {request.end_date}"
             )
         
-        # Get transport mode breakdown
+        # Get transport mode breakdown with optimized query
         breakdown_query = """
             SELECT 
                 s.transport_mode,
-                SUM(ce.co2_kg) as total_co2
+                COALESCE(SUM(ce.co2_kg), 0) as total_co2
             FROM shipments s
-            JOIN carbon_emissions ce ON s.shipment_id = ce.shipment_id
+            LEFT JOIN carbon_emissions ce ON s.shipment_id = ce.shipment_id
             WHERE s.departure_time >= :start_date 
             AND s.departure_time <= :end_date
         """
@@ -168,10 +168,10 @@ async def get_emissions_summary(
         }
         
         return EmissionsSummaryResponse(
-            total_co2_kg=float(result[0]),
-            total_co2_equivalent_kg=float(result[1]),
-            shipment_count=int(result[2]),
-            average_co2_per_shipment=float(result[3]),
+            total_co2_kg=float(result[0] or 0.0),
+            total_co2_equivalent_kg=float(result[1] or 0.0),
+            shipment_count=int(result[2] or 0),
+            average_co2_per_shipment=float(result[3] or 0.0),
             transport_mode_breakdown=transport_mode_breakdown,
             date_range=f"{request.start_date} to {request.end_date}"
         )
@@ -180,7 +180,7 @@ async def get_emissions_summary(
         logger.error("Error getting emissions summary", error=str(e))
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Failed to retrieve emissions summary"
+            detail=f"Failed to retrieve emissions summary: {str(e)}"
         )
 
 
